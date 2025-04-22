@@ -80,12 +80,12 @@ class MainActivity : AppCompatActivity() {
 
         devicesListView.setOnItemClickListener { _, _, position, _ ->
             val deviceInfo = devicesAdapter.getItem(position)
-            val deviceAddress = deviceInfo?.substringAfterLast("\n")
+            val deviceAddressWithStatus = deviceInfo?.substringAfterLast("\n")
+            val deviceAddress = deviceAddressWithStatus?.substringBefore(" ") // Tomar la parte antes del espacio
 
             selectedDevice = bluetoothAdapter?.getRemoteDevice(deviceAddress)
             if (selectedDevice != null) {
                 Toast.makeText(this, "Dispositivo seleccionado: ${selectedDevice?.name}", Toast.LENGTH_SHORT).show()
-                // Llamar a la función para conectar (Paso 4)
                 connectToDevice(selectedDevice!!)
             }
         }
