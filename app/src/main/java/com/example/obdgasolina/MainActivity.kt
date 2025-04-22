@@ -17,15 +17,42 @@ import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.github.eltonvs.obd.command.ObdCommand
-import com.github.eltonvs.obd.command.fuel.FuelLevelCommand // Importa el comando de nivel de combustible
+import com.github.eltonvs.obd.command.ObdRawResponse
+//import com.github.eltonvs.obd.command.fuel.FuelLevelCommand // Importa el comando de nivel de combustible
 import com.github.eltonvs.obd.connection.ObdDeviceConnection
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.IOException
 import java.util.*
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.delay
 
-class MainActivity : AppCompatActivity() {
+// Define la clase fuera de la MainActivity
+class FuelLevelInputCommand : ObdCommand() {
+    override val tag = "FUEL_LEVEL_INPUT"
+    override val name = "Fuel Level Input"
+    override val mode = "01" // Modo OBD (hex 01)
+    override val pid = "42" // PID en hexadecimal (0x5F)
+    override val defaultUnit = "%"
+    override val handler: (ObdRawResponse) -> String = { response ->
+        val hexValue = response.processedValue.substring(3, 5) // Extrae los bytes relevantes
+        val value = Integer.parseInt(hexValue, 16)
+        if (value in 0..100) "$value%" else "N/A"
+    }
+}
+
+class MainActivity : AppCompatActivity(), CoroutineScope {
+
+    private val job = Job()
+    override val coroutineContext: CoroutineContext
+        get() = Dispatchers.Main + job
+
+    // Dentro de MainActivity:
+    private val fuelLevelCommand = FuelLevelInputCommand()
+
 
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     private lateinit var pairedDevices: MutableSet<BluetoothDevice>
@@ -92,7 +119,7 @@ class MainActivity : AppCompatActivity() {
 
         getFuelLevelButton.setOnClickListener {
             if (obdConnection != null) {
-                sendObdCommand(FuelLevelCommand())
+                sendObdCommand(fuelLevelCommand)
             } else {
                 Toast.makeText(this, "No hay conexión OBD establecida", Toast.LENGTH_SHORT).show()
             }
@@ -167,6 +194,7 @@ class MainActivity : AppCompatActivity() {
             val outputStream = socket?.outputStream
             if (inputStream != null && outputStream != null) {
                 obdConnection = ObdDeviceConnection(inputStream, outputStream)
+                startFuelLevelReading()
                 // Ahora puedes usar 'obdConnection' para enviar comandos OBD (Paso 5)
                 Toast.makeText(this, "Conexión OBD lista", Toast.LENGTH_SHORT).show()
             } else {
@@ -190,6 +218,25 @@ class MainActivity : AppCompatActivity() {
                         socket = null
                     } catch (closeException: IOException) {
                         closeException.printStackTrace()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun startFuelLevelReading() {
+        launch(Dispatchers.IO) {
+            while (socket?.isConnected == true) {
+                try {
+                    val response = obdConnection?.run(fuelLevelCommand)
+                    runOnUiThread {
+                        fuelLevelTextView.text = "Nivel: ${response?.value ?: "N/A"}"
+                    }
+                    delay(5000)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    runOnUiThread {
+                        fuelLevelTextView.text = "Error: ${e.message}"
                     }
                 }
             }
@@ -237,6 +284,8 @@ class MainActivity : AppCompatActivity() {
             socket = null
         }
     }
+
+
 }
 
 
