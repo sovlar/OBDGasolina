@@ -1,5 +1,6 @@
 package com.example.obdgasolina
 
+
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -7,6 +8,7 @@ import android.bluetooth.BluetoothSocket
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ListView
@@ -23,6 +25,8 @@ import kotlinx.coroutines.*
 import java.io.IOException
 import java.util.*
 import kotlin.coroutines.CoroutineContext
+import com.github.eltonvs.obd.command.fuel.FuelLevelCommand
+
 
 // 1. Definir la clase FuelLevelInputCommand
 class FuelLevelInputCommand : ObdCommand() {
@@ -33,18 +37,16 @@ class FuelLevelInputCommand : ObdCommand() {
     override val defaultUnit = "%"
     override val handler: (ObdRawResponse) -> String = { response ->
         try {
-            val hexValue = response.processedValue.substring(2);
-            val percentage = Integer.parseInt(hexValue, 16)
-            if (percentage > 99) {
-                "${percentage.toString().substring(0, 2)}"
-            }
-            else{
-                "$percentage"
-            }
+            // La respuesta es 41 2F A (un byte)
+            val hexValue = response.processedValue.substring(2, 4) // Toma el byte A
+            val value = Integer.parseInt(hexValue, 16)
+            val percentage = (100.0 * value / 255.0).toInt() // Cálculo correcto: (100 * A) / 255
+            if (percentage in 0..100) "$percentage" else "N/A"
         } catch (e: Exception) {
-            "N/A"
+            "Error: ${e.message ?: "Respuesta inválida"}"
         }
     }
+
 }
 
 // 2. Clase MainActivity
@@ -121,7 +123,8 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
 
         getFuelLevelButton.setOnClickListener {
             if (obdConnection != null) {
-                sendObdCommand(fuelLevelCommand)
+            sendObdCommand(fuelLevelCommand)
+            //sendObdCommand(fuelLevelCommand)
             } else {
                 Toast.makeText(this, "No hay conexión OBD establecida", Toast.LENGTH_SHORT).show()
             }
@@ -189,7 +192,21 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
             val inputStream = socket?.inputStream
             val outputStream = socket?.outputStream
             if (inputStream != null && outputStream != null) {
+
+                // Crear la conexión OBD
                 obdConnection = ObdDeviceConnection(inputStream, outputStream)
+
+                // Configuración del ELM327 para CAN
+                obdConnection?.runRawCommand("AT Z\r") // Reset
+                obdConnection?.runRawCommand("AT E0\r") // Echo off
+                obdConnection?.runRawCommand("AT L0\r") // Linefeeds off
+                obdConnection?.runRawCommand("AT SP 6\r") // CAN 11-bit 500 kbaud
+                obdConnection?.runRawCommand("AT H0\r") // Headers off
+                val protocol = obdConnection?.runRawCommand("AT DP\r") ?: "Desconocido" // Verificar protocolo
+
+                runOnUiThread { Toast.makeText(this, "Protocolo: $protocol", Toast.LENGTH_SHORT).show() }
+
+                // Iniciar la lectura del nivel de combustible
                 startFuelLevelReading()
                 runOnUiThread { Toast.makeText(this, "Conexión OBD lista", Toast.LENGTH_SHORT).show() }
             } else {
@@ -227,7 +244,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
                             fuelLevelTextView.text = "Nivel: N/A"
                         }
                     }
-                    delay(5000)
+                    delay(1000)
                 } catch (e: Exception) {
                     e.printStackTrace()
                     runOnUiThread {
@@ -298,6 +315,43 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
         } finally {
             obdConnection = null
             socket = null
+        }
+    }
+
+
+    // 10. Función auxiliar para enviar comandos AT
+    private fun ObdDeviceConnection.runRawCommand(command: String): String {
+        return try {
+            clearBuffer()
+            // Escribir el comando
+            val outputStream = this.javaClass.getDeclaredField("outputStream").apply { isAccessible = true }.get(this) as java.io.OutputStream
+            outputStream.write(command.toByteArray())
+            outputStream.flush()
+
+            // Leer la respuesta
+            val inputStream = this.javaClass.getDeclaredField("inputStream").apply { isAccessible = true }.get(this) as java.io.InputStream
+            val buffer = ByteArray(1024)
+            val bytesRead = inputStream.read(buffer)
+            if (bytesRead > 0) {
+                String(buffer, 0, bytesRead).trim()
+            } else {
+                "No response"
+            }
+        } catch (e: Exception) {
+            Log.e("OBD_AT", "Error sending AT command: ${e.message}")
+            "Error: ${e.message}"
+        }
+    }
+    private fun clearBuffer() {
+        try {
+            socket?.inputStream?.let { inputStream ->
+                while (inputStream.available() > 0) {
+                    inputStream.read()
+                }
+                Log.d("OBD_BUFFER", "Búfer limpiado")
+            }
+        } catch (e: IOException) {
+            Log.e("OBD_BUFFER", "Error al limpiar búfer: ${e.message}")
         }
     }
 }
