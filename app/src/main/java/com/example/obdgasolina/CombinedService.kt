@@ -289,14 +289,15 @@ class CombinedService : Service(), CoroutineScope {
         override val name = "Fuel Level"
         override val mode = "01"
         override val pid = "2F"
+        override val defaultUnit = ""
 
         override val handler: (ObdRawResponse) -> String = { response ->
             try {
                 val hexValue = response.processedValue.substring(8, 10)
                 val percentage = (Integer.parseInt(hexValue, 16) * 100 / 255).toInt()
-                "$percentage%"
+                "$percentage"
             } catch (e: Exception) {
-                "N/A"
+                "0"
             }
         }
     }
@@ -305,14 +306,15 @@ class CombinedService : Service(), CoroutineScope {
         override val name = "Speed"
         override val mode = "01"
         override val pid = "0D" // PID para velocidad en km/h
+        override val defaultUnit = ""
 
         override val handler: (ObdRawResponse) -> String = { response ->
             try {
                 val speedValue = response.processedValue.substring(8, 10) // Primer byte es la velocidad en km/h
                 val speed = Integer.parseInt(speedValue, 16).toString()
-                speed
+                "$speed"
             } catch (e: Exception) {
-                "N/A"
+                "0"
             }
         }
     }
