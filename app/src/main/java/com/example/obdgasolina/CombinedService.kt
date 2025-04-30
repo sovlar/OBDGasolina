@@ -36,11 +36,15 @@ class CombinedService : Service(), CoroutineScope {
         get() = Dispatchers.IO + serviceJob
 
     // Variables compartidas entre módulos
-    private var obdFuelLevel = "-"
+    private var obdFuelLevel = "0"
     private var currentLocation: Location? = null
     private var timestamp = ""
+    private var obdSpeed = "0"
 
-    // Componentes de Bluetooth
+    // Comando para velocidad (PID 0D)
+    private val speedCommand = SpeedInputCommand()
+
+    // Componentes de Bluetooth (sin cambios)
     private var bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     private var selectedDeviceAddress: String? = null
     private var obdConnection: ObdDeviceConnection? = null
@@ -48,17 +52,17 @@ class CombinedService : Service(), CoroutineScope {
     private val uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     private val fuelLevelCommand = FuelLevelInputCommand()
 
-    // Componentes de Ubicación
+    // Componentes de Ubicación (adaptación de tu método)
     private var fusedLocationClient: FusedLocationProviderClient? = null
-    private lateinit var locationRequest: LocationRequest
-    private lateinit var locationCallback: LocationCallback
+    private var locationRequest: LocationRequest? = null
+    private var locationCallback: LocationCallback? = null
 
     // Configuración de UDP
     private val dominios = arrayOf(
-        "geofind-an.duckdns.org",
-        "geofind-al.duckdns.org",
-        "geofind-fe.duckdns.org",
-        "geofind-ha.duckdns.org"
+        "geofind-an.ddns.net",
+        "geofind-al.ddns.net",
+        "geofind-fe.ddns.net",
+        "geofind-ha.ddns.net"
     )
     private val puertoUDP = 59595
 
@@ -85,7 +89,7 @@ class CombinedService : Service(), CoroutineScope {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    // Métodos de Bluetooth
+    // Métodos de Bluetooth (sin cambios)
     private fun startOBDService(deviceAddress: String) {
         selectedDeviceAddress = deviceAddress
         connectToDevice()
@@ -142,20 +146,32 @@ class CombinedService : Service(), CoroutineScope {
         GlobalScope.launch {
             while (true) {
                 try {
-                    val response = obdConnection?.run(fuelLevelCommand)
-                    if (response != null) {
-                        obdFuelLevel = response.value.toString()
-                        sendBroadcast(Intent("FUEL_UPDATE").putExtra("FUEL_LEVEL", obdFuelLevel))
+                    // Leer combustible
+                    val fuelResponse = obdConnection?.run(fuelLevelCommand)
+                    if (fuelResponse != null && fuelResponse.value != null) {
+                        obdFuelLevel = fuelResponse.value.toString()
                     }
+
+                    // Leer velocidad
+                    val speedResponse = obdConnection?.run(speedCommand)
+                    if (speedResponse != null && speedResponse.value != null) {
+                        obdSpeed = speedResponse.value.toString()
+                    }
+
+                    sendBroadcast(Intent("OBD_UPDATE").apply {
+                        putExtra("FUEL_LEVEL", obdFuelLevel)
+                        putExtra("SPEED", obdSpeed)
+                    })
                     delay(5000)
                 } catch (e: Exception) {
                     e.printStackTrace()
+                    // Si hay error, no actualiza los valores y se mantienen en 0
                 }
             }
         }
     }
 
-    // Métodos de Ubicación
+    // Métodos de Ubicación (adaptación de tu código)
     private fun startLocationService() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         locationRequest = LocationRequest.create().apply {
@@ -170,27 +186,55 @@ class CombinedService : Service(), CoroutineScope {
                     currentLocation = location
                     timestamp = getFormattedTimestamp(location.time)
                     sendUDPData()
+
+                    // <<--- AGREGA ESTE BROADCAST PARA LA UI
+                    sendBroadcast(Intent("LOCATION_UPDATE").apply {
+                        putExtra("LATITUD", location.latitude.toString())
+                        putExtra("LONGITUD", location.longitude.toString())
+                        putExtra("TIMESTAMP", timestamp)
+                    })
                 }
             }
         }
+
 
         if (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
             ) != PackageManager.PERMISSION_GRANTED
-        ) return
-        fusedLocationClient?.requestLocationUpdates(locationRequest, locationCallback, null)
+        ) {
+            Log.e("Location", "Permiso de ubicación denegado")
+            return
+        }
+
+        // <<--- AGREGA ESTE BLOQUE PARA FORZAR INICIO
+        fusedLocationClient?.requestLocationUpdates(
+            locationRequest ?: return,
+            locationCallback ?: return,
+            null
+        )?.addOnFailureListener {
+            Log.e("Location", "Error al iniciar ubicación: ${it.message}")
+        }
+
+        showNotification("Ubicación activa")
     }
 
     private fun stopLocationService() {
-        fusedLocationClient?.removeLocationUpdates(locationCallback)
+        locationCallback?.let { callback ->
+            fusedLocationClient?.removeLocationUpdates(callback)
+        }
+        locationRequest = null
+        locationCallback = null
+        fusedLocationClient = null
     }
 
-    // UDP y notificaciones
     private fun sendUDPData() {
         val lat = currentLocation?.latitude?.toString() ?: "0.0"
         val lon = currentLocation?.longitude?.toString() ?: "0.0"
-        val message = "lat=$lat,long=$lon,timestamp=$timestamp,fuel=$obdFuelLevel"
+        val timestamp = timestamp
+        val fuel = obdFuelLevel.ifEmpty { "0" } // <<--- Si está vacío, usa "0"
+        val speed = obdSpeed.ifEmpty { "0" }   // <<--- Si está vacío, usa "0"
+        val message = "$lat,$lon,$timestamp,$speed,$fuel" // <<--- AGREGA "speed"
         Log.d("UDP", "Enviando: $message")
 
         dominios.forEach { dominio ->
@@ -198,10 +242,7 @@ class CombinedService : Service(), CoroutineScope {
                 try {
                     val address = InetAddress.getByName(dominio)
                     val packet = DatagramPacket(message.toByteArray(), message.length, address, puertoUDP)
-                    DatagramSocket().apply {
-                        send(packet)
-                        close()
-                    }
+                    DatagramSocket().use { socket -> socket.send(packet) }
                 } catch (e: Exception) {
                     Log.e("UDP", "Error al enviar a $dominio", e)
                 }
@@ -242,7 +283,7 @@ class CombinedService : Service(), CoroutineScope {
         serviceJob.cancel()
     }
 
-    // Comando OBD personalizado
+    // Comando OBD (sin cambios)
     private inner class FuelLevelInputCommand : ObdCommand() {
         override val tag = "FUEL_LEVEL"
         override val name = "Fuel Level"
@@ -254,6 +295,22 @@ class CombinedService : Service(), CoroutineScope {
                 val hexValue = response.processedValue.substring(8, 10)
                 val percentage = (Integer.parseInt(hexValue, 16) * 100 / 255).toInt()
                 "$percentage%"
+            } catch (e: Exception) {
+                "N/A"
+            }
+        }
+    }
+    private inner class SpeedInputCommand : ObdCommand() {
+        override val tag = "SPEED"
+        override val name = "Speed"
+        override val mode = "01"
+        override val pid = "0D" // PID para velocidad en km/h
+        override val defaultUnit = "km/h"
+        override val handler: (ObdRawResponse) -> String = { response ->
+            try {
+                val speedValue = response.processedValue.substring(8, 10) // Primer byte es la velocidad en km/h
+                val speed = Integer.parseInt(speedValue, 16).toString()
+                speed
             } catch (e: Exception) {
                 "N/A"
             }

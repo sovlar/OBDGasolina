@@ -2,10 +2,7 @@ package com.example.obdgasolina
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
+import android.content.*
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -15,22 +12,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
 import kotlin.coroutines.CoroutineContext
-import android.content.*
-import android.os.*
-import com.google.android.gms.location.*
-import java.net.*
-import java.util.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+
 class MainActivity : AppCompatActivity(), CoroutineScope {
 
-    private var job: Job = Job()
+    private var job = Job()
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.Main + job
-
-    // Agrega esta línea en las variables globales de MainActivity
-    private lateinit var devicesAdapter: ArrayAdapter<String>
 
     // Componentes de la UI
     private lateinit var devicesListView: ListView
@@ -38,37 +25,52 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
     private lateinit var btnConnectOBD: Button
     private lateinit var locationTextView: TextView
     private lateinit var btnStartStopLocation: Button
+    private lateinit var speedTextView: TextView // <<--- AGREGADO
 
-    // Variables compartidas entre módulos
+    // Variables compartidas
     private var selectedDeviceAddress: String? = null
-    private var isLocationSending = false
-    private var fuelLevel: String = "-"
+    private var isLocationActive = false
+    private var isOBDServiceRunning = false
 
-    // Permisos y lanzadores
+    // Adaptadores y componentes Bluetooth
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
-    private val enableBluetoothLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ -> checkBluetoothAndFindDevices() }
+    private lateinit var devicesAdapter: ArrayAdapter<String>
+
+    // Lanzadores de permisos
+    private val enableBluetoothLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
+        checkBluetoothAndFindDevices()
+    }
+
     private val bluetoothPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-        if (permissions.all { it.value }) findAvailableDevices()
+        if (permissions.all { it.value }) {
+            findAvailableDevices()
+        }
     }
+
     private val locationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-        if (permissions.all { it.value }) checkLocationPermissions()
+        if (permissions.all { it.value }) {
+            startLocationService()
+        } else {
+            Toast.makeText(this, "Permisos de ubicación denegados", Toast.LENGTH_SHORT).show()
+        }
     }
 
-    private var isOBDServiceRunning = false // <<--- Agrega esta línea en las variables globales
-
-    // Broadcast para recibir actualizaciones
+    // BroadcastReceiver para recibir actualizaciones
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 "LOCATION_UPDATE" -> {
-                    val lat = intent.getStringExtra("LATITUD") ?: ""
-                    val lon = intent.getStringExtra("LONGITUD") ?: ""
-                    val timestamp = intent.getStringExtra("TIMESTAMP") ?: ""
+                    val lat = intent.getStringExtra("LATITUD") ?: "0.0"
+                    val lon = intent.getStringExtra("LONGITUD") ?: "0.0"
+                    val timestamp = intent.getStringExtra("TIMESTAMP") ?: "N/A"
                     locationTextView.text = "Ubicación: Lat $lat, Lon $lon - $timestamp"
                 }
-                "FUEL_UPDATE" -> {
-                    fuelLevel = intent.getStringExtra("FUEL_LEVEL") ?: "-"
-                    fuelLevelTextView.text = "Nivel de Gasolina: $fuelLevel"
+                "OBD_UPDATE" -> {
+                    val fuel = intent.getStringExtra("FUEL_LEVEL") ?: "0"
+                    fuelLevelTextView.text = "Nivel de Gasolina: $fuel%"
+
+                    val speed = intent.getStringExtra("SPEED") ?: "0"
+                    speedTextView.text = "Velocidad: $speed km/h" // <<--- CORREGIDO
                 }
             }
         }
@@ -80,34 +82,35 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
 
         // Inicializar UI
         devicesListView = findViewById(R.id.devicesListView)
-        devicesAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1) // <<--- NUEVO
-        devicesListView.adapter = devicesAdapter // <<--- NUEVO
-
         fuelLevelTextView = findViewById(R.id.fuelLevelTextView)
         btnConnectOBD = findViewById(R.id.btnConnectOBD)
         locationTextView = findViewById(R.id.locationTextView)
         btnStartStopLocation = findViewById(R.id.btnStartStopLocation)
+        speedTextView = findViewById(R.id.speedTextView) // <<--- AGREGADO
 
-        // Configurar Listeners
+        // Configurar adaptador para Bluetooth
+        devicesAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1)
+        devicesListView.adapter = devicesAdapter
+
+        // Listener para selección de dispositivo Bluetooth
         devicesListView.setOnItemClickListener { _, _, position, _ ->
-            val deviceInfo = devicesAdapter.getItem(position) // Usa devicesAdapter
-            if (deviceInfo != null) {
-                val deviceAddressWithStatus = deviceInfo.substringAfterLast("\n")
-                selectedDeviceAddress = deviceAddressWithStatus.substringBefore(" ")
-            }
+            val deviceInfo = devicesAdapter.getItem(position) ?: return@setOnItemClickListener
+            val deviceAddress = deviceInfo.substringAfterLast("\n").substringBefore(" ")
+            selectedDeviceAddress = deviceAddress
         }
 
+        // Botón de conexión OBD
         btnConnectOBD.setOnClickListener {
             if (selectedDeviceAddress != null) {
-                toggleOBDConnection()
-                isOBDServiceRunning = !isOBDServiceRunning // <<--- Invierte el estado
+                toggleOBDService()
             } else {
-                Toast.makeText(this, "Conecta un dispositivo OBD2 primero", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Seleccione un dispositivo OBD2 primero", Toast.LENGTH_SHORT).show()
             }
         }
 
+        // Botón de ubicación
         btnStartStopLocation.setOnClickListener {
-            if (isLocationSending) {
+            if (isLocationActive) {
                 stopLocationService()
             } else {
                 checkLocationPermissions()
@@ -117,10 +120,10 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
         // Registrar BroadcastReceiver
         registerReceiver(broadcastReceiver, IntentFilter().apply {
             addAction("LOCATION_UPDATE")
-            addAction("FUEL_UPDATE")
+            addAction("OBD_UPDATE") // <<--- ENSURE "OBD_UPDATE" IS ADDED
         })
 
-        // Inicializar Bluetooth
+        // Iniciar escaneo de dispositivos Bluetooth
         checkBluetoothAndFindDevices()
     }
 
@@ -156,65 +159,87 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
 
     private fun findAvailableDevices() {
         devicesAdapter.clear()
-        val pairedDevices = bluetoothAdapter?.bondedDevices ?: mutableSetOf()
+        val pairedDevices = bluetoothAdapter?.bondedDevices ?: emptySet()
         pairedDevices.forEach { device ->
             devicesAdapter.add("${device.name}\n${device.address} (Emparejado)")
         }
         devicesAdapter.notifyDataSetChanged()
     }
 
-
-    private fun toggleOBDConnection() {
-        val intent = Intent(this, CombinedService::class.java)
-        if (isOBDServiceRunning) { // <<--- Define esta variable (explicación abajo)
-            intent.action = "ACTION_STOP_OBD"
-            stopService(intent)
-            btnConnectOBD.text = "Conectar OBD"
-        } else {
-            intent.action = "ACTION_START_OBD"
-            intent.putExtra("device_address", selectedDeviceAddress!!)
-            startService(intent)
-            btnConnectOBD.text = "Desconectar OBD"
+    private fun toggleOBDService() {
+        val intent = Intent(this, CombinedService::class.java).apply {
+            if (isOBDServiceRunning) {
+                action = "ACTION_STOP_OBD"
+                btnConnectOBD.text = "Conectar OBD"
+            } else {
+                action = "ACTION_START_OBD"
+                putExtra("device_address", selectedDeviceAddress!!)
+                btnConnectOBD.text = "Desconectar OBD"
+            }
         }
+        startService(intent)
+        isOBDServiceRunning = !isOBDServiceRunning
     }
 
     // Métodos de Ubicación
     private fun checkLocationPermissions() {
-        val permissions = arrayOf(
+        val foregroundPermissions = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+
+        val backgroundPermission = arrayOf(
             Manifest.permission.ACCESS_BACKGROUND_LOCATION
         )
-        if (!allPermissionsGranted(permissions)) {
-            locationPermissionLauncher.launch(permissions)
+
+        if (!allPermissionsGranted(foregroundPermissions)) {
+            locationPermissionLauncher.launch(foregroundPermissions)
         } else {
-            startLocationService()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                !allPermissionsGranted(backgroundPermission)) {
+                locationPermissionLauncher.launch(backgroundPermission)
+            } else {
+                startLocationService()
+            }
+        }
+    }
+
+    private fun allPermissionsGranted(permissions: Array<String>): Boolean {
+        return permissions.all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
     }
 
     private fun startLocationService() {
-        btnStartStopLocation.text = "Detener Envíos"
-        isLocationSending = true
+        isLocationActive = true
+        btnStartStopLocation.text = "Detener Ubicación"
         startService(Intent(this, CombinedService::class.java).apply {
             action = "ACTION_START_LOCATION"
         })
     }
 
     private fun stopLocationService() {
-        btnStartStopLocation.text = "Iniciar Envíos"
-        isLocationSending = false
+        isLocationActive = false
+        btnStartStopLocation.text = "Iniciar Ubicación"
         startService(Intent(this, CombinedService::class.java).apply {
             action = "ACTION_STOP_LOCATION"
         })
-    }
-
-    private fun allPermissionsGranted(permissions: Array<String>): Boolean {
-        return permissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         unregisterReceiver(broadcastReceiver)
         job.cancel()
+        stopLocationService()
+        stopOBDService()
+    }
+
+    private fun stopOBDService() {
+        val intent = Intent(this, CombinedService::class.java).apply {
+            action = "ACTION_STOP_OBD"
+        }
+        startService(intent)
+        isOBDServiceRunning = false
+        btnConnectOBD.text = "Conectar OBD"
     }
 }
