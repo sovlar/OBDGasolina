@@ -67,7 +67,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
                 }
                 "OBD_UPDATE" -> {
                     val fuel = intent.getStringExtra("FUEL_LEVEL") ?: "0"
-                    fuelLevelTextView.text = "Nivel de Gasolina: $fuel%"
+                    fuelLevelTextView.text = "Nivel de Gasolina: $fuel %"
 
                     val speed = intent.getStringExtra("SPEED") ?: "0"
                     speedTextView.text = "Velocidad: $speed km/h" // <<--- CORREGIDO
