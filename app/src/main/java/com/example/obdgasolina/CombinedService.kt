@@ -295,7 +295,7 @@ class CombinedService : Service(), CoroutineScope {
             try {
                 val hexValue = response.processedValue.substring(8, 10)
                 val percentage = (Integer.parseInt(hexValue, 16) * 100 / 255).toInt()
-                "$percentage"
+                "$percentage "
             } catch (e: Exception) {
                 "0"
             }
