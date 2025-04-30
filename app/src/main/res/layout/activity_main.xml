@@ -2,8 +2,10 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:padding="16dp">
 
+    <!-- Sección de Bluetooth (OBD2) -->
     <ListView
         android:id="@+id/devicesListView"
         android:layout_width="match_parent"
@@ -18,9 +20,30 @@
         android:text="Nivel de Gasolina: -" />
 
     <Button
-        android:id="@+id/btnGetFuelLevel"
+        android:id="@+id/btnConnectOBD"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Obtener Nivel de Gasolina" />
+        android:text="Conectar/Desconectar OBD" />
+
+    <!-- Separador visual -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#000000"
+        android:layout_marginVertical="16dp"/>
+
+    <!-- Sección de Ubicación -->
+    <TextView
+        android:id="@+id/locationTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="20sp"
+        android:text="Ubicación: -" />
+
+    <Button
+        android:id="@+id/btnStartStopLocation"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Iniciar Envío de Ubicación" />
 
 </LinearLayout>
