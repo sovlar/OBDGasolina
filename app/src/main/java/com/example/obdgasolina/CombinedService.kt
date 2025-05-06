@@ -240,7 +240,7 @@ class CombinedService : Service(), CoroutineScope {
         val timestamp = timestamp
         val fuel = obdFuelLevel.ifEmpty { "0" } // <<--- Si está vacío, usa "0"
         val speed = obdSpeed.ifEmpty { "0" }   // <<--- Si está vacío, usa "0"
-        val message = "$lat,$lon,$timestamp,$speed,$fuel,$vehicleId" // <<--- AGREGA "speed"
+        val message = "$lat,$lon,$timestamp,$speed,$fuel" // <<--- AGREGA "speed"   ,$vehicleId
         Log.d("UDP", "Enviando: $message")
 
         dominios.forEach { dominio ->
