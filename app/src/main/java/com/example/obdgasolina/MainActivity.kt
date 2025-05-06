@@ -11,6 +11,7 @@ import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.content.res.ResourcesCompat
 import kotlinx.coroutines.*
 import kotlin.coroutines.CoroutineContext
 
@@ -85,6 +86,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
 
         // Inicializar UI
         devicesListView = findViewById(R.id.devicesListView)
