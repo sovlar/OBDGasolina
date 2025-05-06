@@ -71,6 +71,9 @@ class CombinedService : Service(), CoroutineScope {
     private val NOTIFICATION_ID = 1
     private var notificationManager: NotificationManager? = null
 
+    // Valor predeterminado
+    private var vehicleId = "1" // se inicia con el 1 como defecto
+
     override fun onCreate() {
         super.onCreate()
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
@@ -81,7 +84,10 @@ class CombinedService : Service(), CoroutineScope {
         when (intent?.action) {
             "ACTION_START_OBD" -> startOBDService(intent.getStringExtra("device_address") ?: "")
             "ACTION_STOP_OBD" -> stopOBDService()
-            "ACTION_START_LOCATION" -> startLocationService()
+            "ACTION_START_LOCATION" -> {
+                startLocationService()
+                vehicleId = intent.getStringExtra("VEHICLE_ID") ?: "1" // <<--- Obtener vehicleId del Intent
+            }
             "ACTION_STOP_LOCATION" -> stopLocationService()
         }
         return START_STICKY
@@ -234,7 +240,7 @@ class CombinedService : Service(), CoroutineScope {
         val timestamp = timestamp
         val fuel = obdFuelLevel.ifEmpty { "0" } // <<--- Si está vacío, usa "0"
         val speed = obdSpeed.ifEmpty { "0" }   // <<--- Si está vacío, usa "0"
-        val message = "$lat,$lon,$timestamp,$speed,$fuel" // <<--- AGREGA "speed"
+        val message = "$lat,$lon,$timestamp,$speed,$fuel,$vehicleId" // <<--- AGREGA "speed"
         Log.d("UDP", "Enviando: $message")
 
         dominios.forEach { dominio ->

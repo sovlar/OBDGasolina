@@ -6,6 +6,7 @@ import android.content.*
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -25,7 +26,11 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
     private lateinit var btnConnectOBD: Button
     private lateinit var locationTextView: TextView
     private lateinit var btnStartStopLocation: Button
-    private lateinit var speedTextView: TextView // <<--- AGREGADO
+    private lateinit var speedTextView: TextView
+    private lateinit var spinnerVehicle: Spinner
+
+    // Valor predeterminado
+    private var selectedVehicleId = "1"
 
     // Variables compartidas
     private var selectedDeviceAddress: String? = null
@@ -54,6 +59,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
             Toast.makeText(this, "Permisos de ubicación denegados", Toast.LENGTH_SHORT).show()
         }
     }
+
 
     // BroadcastReceiver para recibir actualizaciones
     private val broadcastReceiver = object : BroadcastReceiver() {
@@ -87,6 +93,18 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
         locationTextView = findViewById(R.id.locationTextView)
         btnStartStopLocation = findViewById(R.id.btnStartStopLocation)
         speedTextView = findViewById(R.id.speedTextView) // <<--- AGREGADO
+
+        // Inicializar Spinner
+        spinnerVehicle = findViewById(R.id.spinnerVehicle)
+        spinnerVehicle.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                selectedVehicleId = (position + 1).toString() // 1 o 2
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {
+                selectedVehicleId = "1" // Valor predeterminado si no hay selección
+            }
+        }
 
         // Configurar adaptador para Bluetooth
         devicesAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1)
@@ -174,6 +192,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
             } else {
                 action = "ACTION_START_OBD"
                 putExtra("device_address", selectedDeviceAddress!!)
+                putExtra("VEHICLE_ID", selectedVehicleId) // <<--- AGREGA ESTE EXTRA
                 btnConnectOBD.text = "Desconectar OBD"
             }
         }
@@ -215,6 +234,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
         btnStartStopLocation.text = "Detener Ubicación"
         startService(Intent(this, CombinedService::class.java).apply {
             action = "ACTION_START_LOCATION"
+            putExtra("VEHICLE_ID", selectedVehicleId) // <<--- AGREGA ESTE EXTRA
         })
     }
 
