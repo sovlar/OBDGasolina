@@ -1,8 +1,10 @@
 package com.example.obdgasolina
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothSocket
@@ -268,16 +270,27 @@ class CombinedService : Service(), CoroutineScope {
                 "Servicio Combinado",
                 NotificationManager.IMPORTANCE_DEFAULT
             )
+            channel.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            channel.enableVibration(false)
             notificationManager?.createNotificationChannel(channel)
         }
     }
 
     private fun showNotification(contentText: String) {
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
         val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("Servicios Activos")
+            .setSmallIcon(R.drawable.ic_notification_2) // <<--- Ícono con fondo
+            .setContentTitle("Monitoreo Activo")
             .setContentText(contentText)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
+            .setContentIntent(pendingIntent)
             .build()
         startForeground(NOTIFICATION_ID, notification)
     }

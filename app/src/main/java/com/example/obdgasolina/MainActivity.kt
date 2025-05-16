@@ -15,6 +15,7 @@ import androidx.core.content.res.ResourcesCompat
 import kotlinx.coroutines.*
 import kotlin.coroutines.CoroutineContext
 
+
 class MainActivity : AppCompatActivity(), CoroutineScope {
 
     private var job = Job()
@@ -138,10 +139,11 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
         }
 
         // Registrar BroadcastReceiver
-        registerReceiver(broadcastReceiver, IntentFilter().apply {
+        val intentFilter = IntentFilter().apply {
             addAction("LOCATION_UPDATE")
-            addAction("OBD_UPDATE") // <<--- ENSURE "OBD_UPDATE" IS ADDED
-        })
+            addAction("OBD_UPDATE")
+        }
+        registerReceiver(broadcastReceiver, intentFilter, RECEIVER_NOT_EXPORTED)
 
         // Iniciar escaneo de dispositivos Bluetooth
         checkBluetoothAndFindDevices()
