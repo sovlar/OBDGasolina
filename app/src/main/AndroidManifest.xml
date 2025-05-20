@@ -38,7 +38,7 @@
         <service android:name=".CombinedService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="connectedDevice|location"
+            android:foregroundServiceType="location|connectedDevice"
 
             />
     </application>

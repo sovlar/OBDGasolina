@@ -245,6 +245,13 @@ class CombinedService : Service(), CoroutineScope {
         val message = "$lat,$lon,$timestamp,$speed,$fuel,$vehicleId" // <<--- AGREGA "speed"   ,$vehicleId
         Log.d("UDP", "Enviando: $message")
 
+        // <<--- AGREGA ESTO PARA ACTUALIZAR LA UI
+        sendBroadcast(Intent("LOCATION_UPDATE").apply {
+            putExtra("LATITUD", lat)
+            putExtra("LONGITUD", lon)
+            putExtra("TIMESTAMP", timestamp)
+        })
+
         dominios.forEach { dominio ->
             Thread {
                 try {

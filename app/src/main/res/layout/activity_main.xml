@@ -83,12 +83,12 @@
 
     <!-- Sección de Ubicación -->
     <TextView
-        android:fontFamily="@font/pressstart2p"
         android:id="@+id/locationTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textSize="14sp"
-        android:text="Ubicación: -" />
+        android:fontFamily="@font/pressstart2p"
+        android:text="Ubicación: -"
+        android:textSize="14sp" />
 
     <Button
         android:fontFamily="@font/pressstart2p"
