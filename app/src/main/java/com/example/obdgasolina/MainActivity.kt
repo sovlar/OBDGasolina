@@ -17,7 +17,7 @@ import androidx.core.content.res.ResourcesCompat
 import kotlinx.coroutines.*
 import kotlin.coroutines.CoroutineContext
 import android.content.BroadcastReceiver
-
+import androidx.annotation.RequiresPermission
 
 
 class MainActivity : AppCompatActivity(), CoroutineScope {
@@ -103,11 +103,12 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
 
 
     //@RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    @RequiresApi(Build.VERSION_CODES.O)
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
 
         // Inicializar UI
         devicesListView = findViewById(R.id.devicesListView)
@@ -163,13 +164,14 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
             addAction("LOCATION_UPDATE")
             addAction("OBD_UPDATE")
         }
-        registerReceiver(broadcastReceiver, intentFilter, BroadcastReceiver.RECEIVER_NOT_EXPORTED)
+        registerReceiver(broadcastReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
 
         // Iniciar escaneo de dispositivos Bluetooth
         checkBluetoothAndFindDevices()
     }
 
     // Métodos de Bluetooth
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun checkBluetoothAndFindDevices() {
         if (bluetoothAdapter == null) {
             Toast.makeText(this, "Bluetooth no soportado", Toast.LENGTH_SHORT).show()
@@ -183,6 +185,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
         }
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun checkBluetoothPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val permissions = arrayOf(
@@ -199,6 +202,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
         }
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun findAvailableDevices() {
         devicesAdapter.clear()
         val pairedDevices = bluetoothAdapter?.bondedDevices ?: emptySet()
@@ -225,6 +229,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
     }
 
     // Métodos de Ubicación
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun checkLocationPermissions() {
         val foregroundPermissions = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,

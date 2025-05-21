@@ -29,6 +29,8 @@
         android:theme="@style/Theme.OBDGasolina"
         tools:targetApi="33">
 
+
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
