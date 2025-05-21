@@ -30,6 +30,10 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.nio.charset.Charset
+import java.util.concurrent.Executors
+import android.net.ConnectivityManager
+import java.util.concurrent.TimeUnit
 
 class CombinedService : Service(), CoroutineScope {
 
@@ -194,6 +198,8 @@ class CombinedService : Service(), CoroutineScope {
                 result.lastLocation?.let { location ->
                     currentLocation = location
                     timestamp = getFormattedTimestamp(location.time)
+                    Log.d("Location", "Ubicación recibida: $location")
+
                     sendUDPData()
 
                     // <<--- AGREGA ESTE BROADCAST PARA LA UI
@@ -235,8 +241,12 @@ class CombinedService : Service(), CoroutineScope {
         locationRequest = null
         locationCallback = null
         fusedLocationClient = null
+        stopForeground(true)
+        stopSelf()
     }
 
+
+    /*
     private fun sendUDPData() {
         val lat = currentLocation?.latitude?.toString() ?: "0.0"
         val lon = currentLocation?.longitude?.toString() ?: "0.0"
@@ -256,6 +266,7 @@ class CombinedService : Service(), CoroutineScope {
         dominios.forEach { dominio ->
             Thread {
                 try {
+                    Log.d("UDP", "Resolviendo $dominio")
                     val address = InetAddress.getByName(dominio)
                     val packet = DatagramPacket(message.toByteArray(), message.length, address, puertoUDP)
                     DatagramSocket().use { socket -> socket.send(packet) }
@@ -263,6 +274,92 @@ class CombinedService : Service(), CoroutineScope {
                     Log.e("UDP", "Error al enviar a $dominio", e)
                 }
             }.start()
+        }
+    }
+    */
+
+    private fun sendUDPData() {
+        val lat = currentLocation?.latitude?.toString() ?: "0.0"
+        val lon = currentLocation?.longitude?.toString() ?: "0.0"
+        val timestamp = timestamp
+        val fuel = obdFuelLevel.ifEmpty { "0" }
+        val speed = obdSpeed.ifEmpty { "0" }
+        val message = "$lat,$lon,$timestamp,$speed,$fuel,$vehicleId"
+        Log.d("UDP", "Preparando mensaje UDP: $message")
+
+        // Actualiza la UI
+        sendBroadcast(Intent("LOCATION_UPDATE").apply {
+            putExtra("LATITUD", lat)
+            putExtra("LONGITUD", lon)
+            putExtra("TIMESTAMP", timestamp)
+        })
+
+        // Verifica conectividad antes de intentar enviar
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val networkInfo = connectivityManager.activeNetworkInfo
+        if (networkInfo == null || !networkInfo.isConnected) {
+            Log.e("UDP", "No hay conexión de red disponible")
+            return
+        }
+
+        // Usa un ExecutorService en lugar de crear Threads manualmente
+        val executor = Executors.newFixedThreadPool(dominios.size)
+
+        dominios.forEach { dominio ->
+            executor.execute {
+                var socket: DatagramSocket? = null
+                try {
+                    Log.d("UDP", "Resolviendo dominio: $dominio")
+                    val address = InetAddress.getByName(dominio)
+                    Log.d("UDP", "Dirección IP resuelta: ${address.hostAddress}")
+
+                    // Configuración más detallada del socket
+                    socket = DatagramSocket()
+                    socket.reuseAddress = true
+                    socket.soTimeout = 3000  // 3 segundos de timeout
+
+                    val data = message.toByteArray(Charset.forName("UTF-8"))
+                    val packet = DatagramPacket(data, data.size, address, puertoUDP)
+
+                    Log.d("UDP", "Enviando paquete UDP a ${address.hostAddress}:$puertoUDP")
+                    socket.send(packet)
+                    Log.d("UDP", "Paquete enviado correctamente a $dominio")
+
+                    // Opcional: Intenta recibir una respuesta para confirmar
+                    try {
+                        val receiveBuffer = ByteArray(1024)
+                        val receivePacket = DatagramPacket(receiveBuffer, receiveBuffer.size)
+                        socket.receive(receivePacket)
+                        val response = String(receivePacket.data, 0, receivePacket.length)
+                        Log.d("UDP", "Respuesta recibida de $dominio: $response")
+                    } catch (e: SocketTimeoutException) {
+                        // Es normal que no haya respuesta en UDP
+                        Log.d("UDP", "No se recibió respuesta de $dominio (normal en UDP)")
+                    }
+
+                } catch (e: UnknownHostException) {
+                    Log.e("UDP", "No se pudo resolver el dominio $dominio: ${e.message}")
+                } catch (e: SocketException) {
+                    Log.e("UDP", "Error de socket al enviar a $dominio: ${e.message}")
+                } catch (e: SecurityException) {
+                    Log.e("UDP", "Error de seguridad (¿permisos?): ${e.message}")
+                } catch (e: Exception) {
+                    Log.e("UDP", "Error inesperado al enviar a $dominio", e)
+                } finally {
+                    socket?.close()
+                }
+            }
+        }
+
+        // Cerramos el executor ordenadamente
+        executor.shutdown()
+        try {
+            // Espera hasta 10 segundos para que terminen todos los envíos
+            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                executor.shutdownNow()
+            }
+        } catch (e: InterruptedException) {
+            executor.shutdownNow()
         }
     }
 
@@ -308,6 +405,7 @@ class CombinedService : Service(), CoroutineScope {
         stopLocationService()
         disconnectFromDevice()
         serviceJob.cancel()
+        stopSelf()
     }
 
     // Comando OBD (sin cambios)

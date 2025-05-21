@@ -10,11 +10,14 @@ import android.util.Log
 import android.view.View
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import kotlinx.coroutines.*
 import kotlin.coroutines.CoroutineContext
+import android.content.BroadcastReceiver
+
 
 
 class MainActivity : AppCompatActivity(), CoroutineScope {
@@ -99,6 +102,8 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
         }
 
 
+    //@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -158,7 +163,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
             addAction("LOCATION_UPDATE")
             addAction("OBD_UPDATE")
         }
-        registerReceiver(broadcastReceiver, intentFilter, RECEIVER_NOT_EXPORTED)
+        registerReceiver(broadcastReceiver, intentFilter, BroadcastReceiver.RECEIVER_NOT_EXPORTED)
 
         // Iniciar escaneo de dispositivos Bluetooth
         checkBluetoothAndFindDevices()
@@ -253,7 +258,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
         btnStartStopLocation.text = "Detener Ubicación"
         startService(Intent(this, CombinedService::class.java).apply {
             action = "ACTION_START_LOCATION"
-            putExtra("VEHICLE_ID", selectedVehicleId) // <<--- AGREGA ESTE EXTRA
+            putExtra("VEHICLE_ID", selectedVehicleId)
         })
     }
 

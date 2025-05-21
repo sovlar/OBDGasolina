@@ -39,7 +39,8 @@ android {
 
 dependencies {
     //implementation("com.github.eltonvs:kotlin-obd-api:2.0.0") // <<--- Versión actualizada // <<--- Versión actualizada
-    implementation("com.google.android.gms:play-services-location:21.3.0")
+
+    implementation libs.play.services.location
     implementation libs.androidx.appcompat
     implementation libs.androidx.core.ktx.v1120
     implementation libs.androidx.constraintlayout
