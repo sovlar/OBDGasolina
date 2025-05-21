@@ -6,6 +6,7 @@ import android.content.*
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
@@ -84,10 +85,24 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
         }
     }
 
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+            if (isGranted) {
+                Log.d("MainActivity", "Notification permission granted")
+                // Permiso concedido, puedes proceder a mostrar notificaciones
+                // o reintentar la acción que requería el permiso.
+            } else {
+                Log.d("MainActivity", "Notification permission denied")
+                Toast.makeText(this, "Se necesitan permisos para notificaciones", Toast.LENGTH_SHORT).show() // Permiso denegado. Informa al usuario o deshabilita la funcionalidad.
+                // Podrías mostrar un Snackbar explicando por qué necesitas el permiso.
+            }
+        }
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
+        notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
 
         // Inicializar UI
         devicesListView = findViewById(R.id.devicesListView)

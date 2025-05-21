@@ -83,6 +83,7 @@ class CombinedService : Service(), CoroutineScope {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d("CombinedService", "onStartCommand received. Action: ${intent?.action}")
         when (intent?.action) {
             "ACTION_START_OBD" -> startOBDService(intent.getStringExtra("device_address") ?: "")
             "ACTION_STOP_OBD" -> stopOBDService()
