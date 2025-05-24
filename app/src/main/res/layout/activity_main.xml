@@ -1,26 +1,100 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:background="@drawable/background_gradient"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Sección de Bluetooth (OBD2) -->
+
 
     <ListView
         android:id="@+id/devicesListView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1"
+        android:background="@color/background_end"
+        android:divider="@color/primary_text"
+        android:dividerHeight="2dp"
+        android:fontFamily="@font/pressstart2p"
+        android:padding="16dp"
+        android:textColor="@color/white"
+        android:textSize="24sp" />
 
+    <!-- Separador visual -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#000000"
+        android:layout_marginVertical="16dp"/>
     <TextView
         android:id="@+id/fuelLevelTextView"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textSize="20sp"
-        android:text="Nivel de Gasolina: -" />
-
-    <Button
-        android:id="@+id/btnGetFuelLevel"
+        android:layout_height="54dp"
+        android:fontFamily="@font/pressstart2p"
+        android:text="Nivel de Gasolina: -"
+        android:textSize="18sp" />
+    <TextView
+        android:fontFamily="@font/pressstart2p"
+        android:id="@+id/speedTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Obtener Nivel de Gasolina" />
+        android:textSize="18sp"
+        android:text="Velocidad: 0 km/h" />
+
+    <Button
+        android:fontFamily="@font/pressstart2p"
+        android:id="@+id/btnConnectOBD"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Conectar/Desconectar OBD" />
+
+    <!-- Separador visual -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#000000"
+        android:layout_marginVertical="16dp"/>
+
+    <!-- Sección de selección de vehículo -->
+    <TextView
+        android:fontFamily="@font/pressstart2p"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Vehículo:"
+        android:textSize="18sp"
+        android:layout_marginTop="16dp"/>
+
+    <Spinner
+        android:fontFamily="@font/pressstart2p"
+        android:id="@+id/spinnerVehicle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:entries="@array/vehicle_options" /> <!-- <- AGREGAR array en strings.xml -->
+
+    <!-- Separador visual -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#000000"
+        android:layout_marginVertical="16dp"/>
+
+
+    <!-- Sección de Ubicación -->
+    <TextView
+        android:id="@+id/locationTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/pressstart2p"
+        android:text="Ubicación: -"
+        android:textSize="14sp" />
+
+    <Button
+        android:fontFamily="@font/pressstart2p"
+        android:id="@+id/btnStartStopLocation"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Iniciar Envío de Ubicación" />
 
 </LinearLayout>

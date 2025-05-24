@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">OBDGasolina</string>
+    <string-array name="vehicle_options">
+        <item>Vehículo 1</item>
+        <item>Vehículo 2</item>
+    </string-array>
 </resources>

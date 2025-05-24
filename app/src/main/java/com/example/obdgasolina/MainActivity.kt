@@ -2,303 +2,293 @@ package com.example.obdgasolina
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothSocket
-import android.content.Intent
+import android.content.*
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
-import android.widget.ArrayAdapter
-import android.widget.Button
-import android.widget.ListView
-import android.widget.TextView
-import android.widget.Toast
+import android.util.Log
+import android.view.View
+import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresPermission
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.github.eltonvs.obd.command.ObdCommand
-import com.github.eltonvs.obd.command.ObdRawResponse
-import com.github.eltonvs.obd.connection.ObdDeviceConnection
+import androidx.core.content.res.ResourcesCompat
 import kotlinx.coroutines.*
-import java.io.IOException
-import java.util.*
 import kotlin.coroutines.CoroutineContext
+import android.content.BroadcastReceiver
+import androidx.annotation.RequiresPermission
 
-// 1. Definir la clase FuelLevelInputCommand
-class FuelLevelInputCommand : ObdCommand() {
-    override val tag = "FUEL_LEVEL_INPUT"
-    override val name = "Fuel Level Input"
-    override val mode = "01"
-    override val pid = "2F"  // Cambiar a 2F
-    override val defaultUnit = "%"
-    override val handler: (ObdRawResponse) -> String = { response ->
-        try {
-            println("Respuesta OBD cruda: ${response.processedValue}")
-            val cleanValue = response.processedValue.replace(" ", "") // Limpiar espacios
-            if (cleanValue.length < 6) throw IllegalArgumentException("Respuesta demasiado corta")
-            val hexValue = cleanValue.substring(8, 10) // Tomar el byte de datos
-            val rawValue = Integer.parseInt(hexValue, 16) // Convertir a entero (0-255)
-            val percentage = (rawValue * 100.0 / 255.0).toInt() // Escalar a porcentaje
-            println("Valor hexadecimal: $hexValue, Porcentaje: $percentage")
-            "$percentage"
-        } catch (e: Exception) {
-            "N/A"
-        }
-    }
-}
 
-// 2. Clase MainActivity
 class MainActivity : AppCompatActivity(), CoroutineScope {
 
-    private var job: Job = Job()
+    private var job = Job()
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.Main + job
 
-    private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
-    private lateinit var pairedDevices: MutableSet<BluetoothDevice>
+    // Componentes de la UI
     private lateinit var devicesListView: ListView
-    private lateinit var devicesAdapter: ArrayAdapter<String>
-    private var selectedDevice: BluetoothDevice? = null
-    private var obdConnection: ObdDeviceConnection? = null
-    private var socket: BluetoothSocket? = null
-    private val uuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     private lateinit var fuelLevelTextView: TextView
-    private lateinit var getFuelLevelButton: Button
+    private lateinit var btnConnectOBD: Button
+    private lateinit var locationTextView: TextView
+    private lateinit var btnStartStopLocation: Button
+    private lateinit var speedTextView: TextView
+    private lateinit var spinnerVehicle: Spinner
 
-    private val fuelLevelCommand = FuelLevelInputCommand()
+    // Valor predeterminado
+    private var selectedVehicleId = "1"
 
-    // 3. Launchers para resultados de actividades
-    private val enableBluetoothLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == RESULT_OK) {
-                findAvailableDevices()
-            } else {
-                Toast.makeText(this, "Bluetooth no activado", Toast.LENGTH_SHORT).show()
-            }
-        }
+    // Variables compartidas
+    private var selectedDeviceAddress: String? = null
+    private var isLocationActive = false
+    private var isOBDServiceRunning = false
 
-    private val locationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-            if (permissions.all { it.value }) {
-                findAvailableDevices()
-            } else {
-                Toast.makeText(this, "Permisos de ubicación necesarios para escanear", Toast.LENGTH_SHORT).show()
-            }
-        }
+    // Adaptadores y componentes Bluetooth
+    private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
+    private lateinit var devicesAdapter: ArrayAdapter<String>
 
-    private val bluetoothPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-            if (permissions.all { it.value }) {
-                findAvailableDevices()
-            } else {
-                Toast.makeText(this, "Permisos de Bluetooth necesarios para escanear/conectar", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-    // 4. onCreate
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        devicesListView = findViewById(R.id.devicesListView)
-        devicesAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1)
-        devicesListView.adapter = devicesAdapter
-
-        fuelLevelTextView = findViewById(R.id.fuelLevelTextView)
-        getFuelLevelButton = findViewById(R.id.btnGetFuelLevel)
-
-        devicesListView.setOnItemClickListener { _, _, position, _ ->
-            val deviceInfo = devicesAdapter.getItem(position)
-            val deviceAddressWithStatus = deviceInfo?.substringAfterLast("\n")
-            val deviceAddress = deviceAddressWithStatus?.substringBefore(" ")
-
-            selectedDevice = bluetoothAdapter?.getRemoteDevice(deviceAddress)
-            if (selectedDevice != null) {
-                Toast.makeText(this, "Dispositivo seleccionado: ${selectedDevice?.name}", Toast.LENGTH_SHORT).show()
-                connectToDevice(selectedDevice!!)
-            }
-        }
-
-        getFuelLevelButton.setOnClickListener {
-            if (obdConnection != null) {
-                sendObdCommand(fuelLevelCommand)
-            } else {
-                Toast.makeText(this, "No hay conexión OBD establecida", Toast.LENGTH_SHORT).show()
-            }
-        }
-
+    // Lanzadores de permisos
+    private val enableBluetoothLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
         checkBluetoothAndFindDevices()
     }
 
-    // 5. Funciones para Bluetooth y permisos
+    private val bluetoothPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        if (permissions.all { it.value }) {
+            findAvailableDevices()
+        }
+    }
+
+    private val locationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        if (permissions.all { it.value }) {
+            startLocationService()
+        } else {
+            Toast.makeText(this, "Permisos de ubicación denegados", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+
+    // BroadcastReceiver para recibir actualizaciones
+    private val broadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                "LOCATION_UPDATE" -> {
+                    val lat = intent.getStringExtra("LATITUD") ?: "0.0"
+                    val lon = intent.getStringExtra("LONGITUD") ?: "0.0"
+                    val timestamp = intent.getStringExtra("TIMESTAMP") ?: "N/A"
+                    locationTextView.text = "Ubicación: Lat $lat, Lon $lon - $timestamp"
+                }
+                "OBD_UPDATE" -> {
+                    val fuel = intent.getStringExtra("FUEL_LEVEL") ?: "0"
+                    fuelLevelTextView.text = "Nivel de Gasolina: $fuel %"
+
+                    val speed = intent.getStringExtra("SPEED") ?: "0"
+                    speedTextView.text = "Velocidad: $speed km/h" // <<--- CORREGIDO
+                }
+            }
+        }
+    }
+
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+            if (isGranted) {
+                Log.d("MainActivity", "Notification permission granted")
+                // Permiso concedido, puedes proceder a mostrar notificaciones
+                // o reintentar la acción que requería el permiso.
+            } else {
+                Log.d("MainActivity", "Notification permission denied")
+                Toast.makeText(this, "Se necesitan permisos para notificaciones", Toast.LENGTH_SHORT).show() // Permiso denegado. Informa al usuario o deshabilita la funcionalidad.
+                // Podrías mostrar un Snackbar explicando por qué necesitas el permiso.
+            }
+        }
+
+
+    //@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+
+        // Inicializar UI
+        devicesListView = findViewById(R.id.devicesListView)
+        fuelLevelTextView = findViewById(R.id.fuelLevelTextView)
+        btnConnectOBD = findViewById(R.id.btnConnectOBD)
+        locationTextView = findViewById(R.id.locationTextView)
+        btnStartStopLocation = findViewById(R.id.btnStartStopLocation)
+        speedTextView = findViewById(R.id.speedTextView) // <<--- AGREGADO
+
+        // Inicializar Spinner
+        spinnerVehicle = findViewById(R.id.spinnerVehicle)
+        spinnerVehicle.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                selectedVehicleId = (position + 1).toString() // 1 o 2
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {
+                selectedVehicleId = "1" // Valor predeterminado si no hay selección
+            }
+        }
+
+        // Configurar adaptador para Bluetooth
+        devicesAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1)
+        devicesListView.adapter = devicesAdapter
+
+        // Listener para selección de dispositivo Bluetooth
+        devicesListView.setOnItemClickListener { _, _, position, _ ->
+            val deviceInfo = devicesAdapter.getItem(position) ?: return@setOnItemClickListener
+            val deviceAddress = deviceInfo.substringAfterLast("\n").substringBefore(" ")
+            selectedDeviceAddress = deviceAddress
+        }
+
+        // Botón de conexión OBD
+        btnConnectOBD.setOnClickListener {
+            if (selectedDeviceAddress != null) {
+                toggleOBDService()
+            } else {
+                Toast.makeText(this, "Seleccione un dispositivo OBD2 primero", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Botón de ubicación
+        btnStartStopLocation.setOnClickListener {
+            if (isLocationActive) {
+                stopLocationService()
+            } else {
+                checkLocationPermissions()
+            }
+        }
+
+        // Registrar BroadcastReceiver
+        val intentFilter = IntentFilter().apply {
+            addAction("LOCATION_UPDATE")
+            addAction("OBD_UPDATE")
+        }
+        registerReceiver(broadcastReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
+
+        // Iniciar escaneo de dispositivos Bluetooth
+        checkBluetoothAndFindDevices()
+    }
+
+    // Métodos de Bluetooth
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun checkBluetoothAndFindDevices() {
         if (bluetoothAdapter == null) {
-            Toast.makeText(this, "Bluetooth no soportado en este dispositivo", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Bluetooth no soportado", Toast.LENGTH_SHORT).show()
             return
         }
 
         if (!bluetoothAdapter.isEnabled) {
-            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            enableBluetoothLauncher.launch(enableBtIntent)
+            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
         } else {
-            checkPermissionsAndFindDevices()
+            checkBluetoothPermissions()
         }
     }
 
-    private fun checkPermissionsAndFindDevices() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            val permissionsToRequest = arrayOf(
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    private fun checkBluetoothPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val permissions = arrayOf(
                 Manifest.permission.BLUETOOTH_CONNECT,
                 Manifest.permission.BLUETOOTH_SCAN
             )
-            val permissionsNotGranted = permissionsToRequest.filter {
-                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-            }
-            if (permissionsNotGranted.isNotEmpty()) {
-                bluetoothPermissionLauncher.launch(permissionsNotGranted.toTypedArray())
-                return
+            if (!allPermissionsGranted(permissions)) {
+                bluetoothPermissionLauncher.launch(permissions)
+            } else {
+                findAvailableDevices()
             }
         } else {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
-                return
-            }
+            findAvailableDevices()
         }
-        findAvailableDevices()
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun findAvailableDevices() {
         devicesAdapter.clear()
-        pairedDevices = bluetoothAdapter?.bondedDevices ?: mutableSetOf()
+        val pairedDevices = bluetoothAdapter?.bondedDevices ?: emptySet()
         pairedDevices.forEach { device ->
             devicesAdapter.add("${device.name}\n${device.address} (Emparejado)")
         }
         devicesAdapter.notifyDataSetChanged()
-
-        Toast.makeText(this, "Mostrando dispositivos emparejados", Toast.LENGTH_SHORT).show()
     }
 
-    // 6. Conectar al dispositivo Bluetooth
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    private fun connectToDevice(device: BluetoothDevice) {
-        try {
-            socket = device.createRfcommSocketToServiceRecord(uuid)
-            socket?.connect()
-            runOnUiThread { Toast.makeText(this, "Conectado a ${device.name}", Toast.LENGTH_SHORT).show() }
-
-            val inputStream = socket?.inputStream
-            val outputStream = socket?.outputStream
-            if (inputStream != null && outputStream != null) {
-                obdConnection = ObdDeviceConnection(inputStream, outputStream)
-                startFuelLevelReading()
-                runOnUiThread { Toast.makeText(this, "Conexión OBD lista", Toast.LENGTH_SHORT).show() }
+    private fun toggleOBDService() {
+        val intent = Intent(this, CombinedService::class.java).apply {
+            if (isOBDServiceRunning) {
+                action = "ACTION_STOP_OBD"
+                btnConnectOBD.text = "Conectar OBD"
             } else {
-                runOnUiThread { Toast.makeText(this, "Error al obtener streams del socket", Toast.LENGTH_SHORT).show() }
-                socket?.close()
-                socket = null
+                action = "ACTION_START_OBD"
+                putExtra("device_address", selectedDeviceAddress!!)
+                putExtra("VEHICLE_ID", selectedVehicleId) // <<--- AGREGA ESTE EXTRA
+                btnConnectOBD.text = "Desconectar OBD"
             }
+        }
+        startService(intent)
+        isOBDServiceRunning = !isOBDServiceRunning
+    }
 
-        } catch (e: IOException) {
-            e.printStackTrace()
-            val errorMessage = "Error al conectar a ${device.name}: ${e.message}"
-            runOnUiThread { Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show() }
-        } finally {
-            if (socket != null && !socket!!.isConnected) {
-                try {
-                    socket!!.close()
-                    socket = null
-                } catch (closeException: IOException) {
-                    closeException.printStackTrace()
-                }
+    // Métodos de Ubicación
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun checkLocationPermissions() {
+        val foregroundPermissions = arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+
+        val backgroundPermission = arrayOf(
+            Manifest.permission.ACCESS_BACKGROUND_LOCATION
+        )
+
+        if (!allPermissionsGranted(foregroundPermissions)) {
+            locationPermissionLauncher.launch(foregroundPermissions)
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                !allPermissionsGranted(backgroundPermission)) {
+                locationPermissionLauncher.launch(backgroundPermission)
+            } else {
+                startLocationService()
             }
         }
     }
 
-    // 7.  Leer el nivel de combustible cada 5 segundos
-    private fun startFuelLevelReading() {
-        launch(Dispatchers.IO) {
-            while (socket?.isConnected == true) {
-                try {
-                    val response = obdConnection?.run(fuelLevelCommand)
-                    runOnUiThread {
-                        if (response != null) {
-                            fuelLevelTextView.text = "Nivel: ${response.value} %"
-                        } else {
-                            fuelLevelTextView.text = "Nivel: N/A"
-                        }
-                    }
-                    delay(10000)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    runOnUiThread {
-                        fuelLevelTextView.text = "Error: ${e.message}"
-                        Toast.makeText(
-                            this@MainActivity,
-                            "Error al leer el nivel de combustible: ${e.message}",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-            }
-            runOnUiThread {
-                Toast.makeText(
-                    this@MainActivity,
-                    "Lectura periódica del nivel de combustible detenida",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
+    private fun allPermissionsGranted(permissions: Array<String>): Boolean {
+        return permissions.all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
     }
 
-    // 8. Función para enviar comandos OBD
-    private fun sendObdCommand(command: ObdCommand) {
-        runBlocking(Dispatchers.IO) {
-            try {
-                val response = obdConnection?.run(command)
-                runOnUiThread {
-                    if (response != null) {
-                        val fuelLevel = response.value
-                        val unit = response.unit
-                        fuelLevelTextView.text = "$fuelLevel $unit"
-                        Toast.makeText(
-                            this@MainActivity,
-                            "Nivel de Gasolina: $fuelLevel $unit",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    } else {
-                        fuelLevelTextView.text = "No se pudo leer el nivel de gasolina"
-                        Toast.makeText(
-                            this@MainActivity,
-                            "No se recibió respuesta para el nivel de gasolina",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-            } catch (e: IOException) {
-                e.printStackTrace()
-                runOnUiThread {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Error al enviar comando: ${e.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
+    private fun startLocationService() {
+        isLocationActive = true
+        btnStartStopLocation.text = "Detener Ubicación"
+        startService(Intent(this, CombinedService::class.java).apply {
+            action = "ACTION_START_LOCATION"
+            putExtra("VEHICLE_ID", selectedVehicleId)
+        })
     }
 
-    // 9. onDestroy
+    private fun stopLocationService() {
+        isLocationActive = false
+        btnStartStopLocation.text = "Iniciar Ubicación"
+        startService(Intent(this, CombinedService::class.java).apply {
+            action = "ACTION_STOP_LOCATION"
+        })
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        unregisterReceiver(broadcastReceiver)
         job.cancel()
-        try {
-            socket?.close()
-        } catch (e: IOException) {
-            e.printStackTrace()
-        } finally {
-            obdConnection = null
-            socket = null
+        stopLocationService()
+        stopOBDService()
+    }
+
+    private fun stopOBDService() {
+        val intent = Intent(this, CombinedService::class.java).apply {
+            action = "ACTION_STOP_OBD"
         }
+        startService(intent)
+        isOBDServiceRunning = false
+        btnConnectOBD.text = "Conectar OBD"
     }
 }
-

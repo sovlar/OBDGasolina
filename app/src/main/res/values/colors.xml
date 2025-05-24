@@ -7,4 +7,22 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Fondo principal -->
+    <color name="background_start">#000428</color> <!-- Azul oscuro -->
+    <color name="background_end">#004e92</color> <!-- Azul medio -->
+
+    <!-- Textos principales -->
+    <color name="primary_text">#00aaff</color> <!-- Azul brillante -->
+    <color name="secondary_text">#ffffff</color> <!-- Blanco -->
+
+    <!-- Bordes y sombras -->
+    <color name="border_color">#004e92</color> <!-- Azul medio -->
+    <color name="shadow_color">#013665</color> <!-- Azul oscuro más profundo -->
+
+    <!-- Botones y elementos interactivos -->
+    <color name="button_background">#00aaff</color> <!-- Azul brillante -->
+    <color name="button_text">#ffffff</color> <!-- Blanco -->
+
+    <color name="primary_color">#00aaff</color>
 </resources>
