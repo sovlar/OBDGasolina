@@ -12,13 +12,6 @@ This application enables users to:
 *   Read and display over 50 supported OBD-II commands in real-time.
 *   Present the data in a clear and readable user interface.
 
-## 📸 Screenshots (Example)
-
-*(It is highly recommended to add actual screenshots of your application here once the UI is ready. This greatly helps people understand what your app does at a glance.)*
-
-| Command List | Bluetooth Connection |
-| :---: | :---: |
-| *(Your Screenshot Here)* | *(Your Screenshot Here)* |
 
 ## 🛠️ Tech Stack & Architecture
 
