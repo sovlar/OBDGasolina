@@ -52,6 +52,21 @@ Follow these steps to get the project up and running on your local machine.
 4.  **Run the application:**
     *   Connect your physical Android device.
     *   Click the `Run 'app'` button (▶️).
+  
+
+## 🔗 Proyectos Relacionados
+
+Este repositorio es la herramienta de captura de datos, pero el ecosistema se completa con la visualización y el rastreo. 
+
+El proyecto **OBD Gasolina** se conecta y envía los datos recolectados al siguiente repositorio para su análisis y monitoreo:
+
+* **[GPS Finder](https://github.com/Pipex02/gps-finder):** Esta es la plataforma principal donde se centralizan y visualizan los resultados obtenidos del vehículo, permitiendo un seguimiento detallado de la ubicación y el estado del motor en un entorno integrado.
+
+---
+### Flujo de Trabajo
+1.  **Captura:** `OBD Gasolina` lee los sensores mediante el adaptador ELM327.
+2.  **Transmisión:** Los datos se procesan y se vinculan con el sistema de rastreo.
+3.  **Visualización:** Los resultados finales se despliegan en la interfaz de `GPS Finder`.
 
 ## 📄 License
 
